@@ -25,7 +25,7 @@ def dice_coef_loss(y_true, y_pred):
     return -dice_coef(y_true, y_pred)
 
 
-def crossentropy_cut(y_true,y_pred): # cross-entropy loss
+def crossentropy_cut(y_true, y_pred):  # cross-entropy loss
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
     y_pred_f= tf.clip_by_value(y_pred_f, 1e-7, (1. - 1e-7))

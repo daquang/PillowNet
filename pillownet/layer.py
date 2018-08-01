@@ -4,6 +4,7 @@ from keras.engine.topology import Layer
 from keras.layers import Conv1D, Conv2DTranspose, Lambda, Add, UpSampling1D, Concatenate, MaxPooling1D
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.normalization import BatchNormalization
+from .motif import load_meme
 
 
 def compose(*funcs):
@@ -19,7 +20,7 @@ def compose(*funcs):
         raise ValueError('Composition of empty sequence not supported.')
 
 
-def Conv1D_BN_Leaky(filters, kernel_size, strides=1, padding='valid', dilation_rate=1, alpha=0.1):
+def conv1d_batchnorm_leaky(filters, kernel_size, strides=1, padding='valid', dilation_rate=1, alpha=0.1):
     """Convolution1D followed by BatchNormalization and LeakyReLU."""
     return compose(
         Conv1D(filters=filters, kernel_size=kernel_size, strides=strides, padding=padding, dilation_rate=dilation_rate),
@@ -27,13 +28,31 @@ def Conv1D_BN_Leaky(filters, kernel_size, strides=1, padding='valid', dilation_r
         LeakyReLU(alpha=alpha))
 
 
-def Conv1DTranspose(input_tensor, filters, kernel_size, strides=2, padding='same'):
-    x = Lambda(lambda x: K.expand_dims(x, axis=2))(input_tensor)
-    x = Conv2DTranspose(filters=filters, kernel_size=(kernel_size, 1), strides=(strides, 1), padding=padding)(x)
-    x = Lambda(lambda x: K.squeeze(x, axis=2))(x)
-    return x
+def conv1dtranspose(filters, kernel_size, strides=2, padding='same'):
+    return compose(
+        Lambda(lambda x: K.expand_dims(x, axis=2)),
+        Conv2DTranspose(filters=filters, kernel_size=(kernel_size, 1), strides=(strides, 1), padding=padding),
+        Lambda(lambda x: K.squeeze(x, axis=2)))
+
+
+def conv1d_block(filters=32, kernel_size=7, activation='relu', padding='same', depth=2):
+    block = compose(*[Conv1D(filters=filters, kernel_size=kernel_size, activation=activation, padding=padding)
+                      for _ in range(depth)])
+    return block
+
+
+def convmaxpool1d_block(filters=32, kernel_size=7, activation='relu', padding='same', depth=2, pool_size=2):
+    block = compose(*[Conv1D(filters=filters, kernel_size=kernel_size, activation=activation, padding=padding)
+                      for _ in range(depth)], MaxPooling1D(pool_size=pool_size))
+    return block
 
 
 class ReverseComplement(Layer):
     def call(self, x):
         return x[:, ::-1, ::-1]
+
+
+class Reverse(Layer):
+    def call(self, x):
+        return x[:, ::-1, :]
+
