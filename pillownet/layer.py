@@ -54,5 +54,5 @@ class ReverseComplement(Layer):
 
 class Reverse(Layer):
     def call(self, x):
-        return x[:, ::-1, :]
+        return x[:, ::-1]
 
