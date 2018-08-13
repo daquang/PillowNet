@@ -108,7 +108,7 @@ def unet(size=1024, input_channel=4, output_channel=1, filters=32, kernel_size=7
 
     model = Model(inputs=[inputs], outputs=[conv_final])
 
-    loss_func = dice_coef if use_dice else binary_crossentropy_cut()
+    loss_func = dice_coef if use_dice else binary_crossentropy_cut
     model.compile(optimizer=Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, decay=0.0), loss=loss_func,
                   metrics=[binary_accuracy_cut, loss_func])
 
