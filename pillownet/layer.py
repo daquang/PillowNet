@@ -20,10 +20,12 @@ def compose(*funcs):
         raise ValueError('Composition of empty sequence not supported.')
 
 
-def conv1d_batchnorm_leaky(filters, kernel_size, strides=1, padding='valid', dilation_rate=1, alpha=0.1):
+def conv1d_batchnorm_leaky(filters, kernel_size, strides=1, padding='valid', dilation_rate=1, input_shape=None,
+                           alpha=0.1):
     """Convolution1D followed by BatchNormalization and LeakyReLU."""
     return compose(
-        Conv1D(filters=filters, kernel_size=kernel_size, strides=strides, padding=padding, dilation_rate=dilation_rate),
+        Conv1D(filters=filters, kernel_size=kernel_size, strides=strides, padding=padding, dilation_rate=dilation_rate,
+               input_shape=input_shape),
         BatchNormalization(),
         LeakyReLU(alpha=alpha))
 

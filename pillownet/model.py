@@ -6,7 +6,7 @@ from keras.optimizers import Adam
 from .layer import conv1dtranspose, conv1d_block, ReverseComplement, Reverse
 
 
-def sliding(size=1024, input_channel=4, output_channel=1, filters=32, kernel_size=26, dense_units=975):
+def sliding(size=1018, input_channel=4, output_channel=1, filters=8, kernel_size=20, pool_size=10, dense_units=100):
     model = Sequential()
     model.add(Conv1D(filters=filters,
                      kernel_size=kernel_size,
@@ -15,14 +15,21 @@ def sliding(size=1024, input_channel=4, output_channel=1, filters=32, kernel_siz
                      activation='relu',
                      input_shape=(size, input_channel),
                      ))
-    model.add(MaxPooling1D(pool_size=13,
-                           strides=13))
+    model.add(Conv1D(filters=2*filters,
+                     kernel_size=kernel_size,
+                     strides=1,
+                     padding='valid',
+                     activation='relu',
+                     ))
+    model.add(MaxPooling1D(pool_size=pool_size,
+                           strides=pool_size))
     model.add(Flatten())
     model.add(Dense(units=dense_units, activation='relu'))
     model.add(Dense(units=output_channel, activation='sigmoid'))
     model.compile(loss='binary_crossentropy',
                   optimizer='adam',
                   metrics=['accuracy'])
+    return model
 
 
 def unet(size=1024, input_channel=4, output_channel=1, filters=32, kernel_size=7, depth=5, crop=False, skip=True,
@@ -115,7 +122,7 @@ def unet(size=1024, input_channel=4, output_channel=1, filters=32, kernel_size=7
     return model
 
 
-def double_stranded_model(model, use_maximum=False):
+def double_stranded(model, use_maximum=False):
     inputs = model.inputs
     inputs_rc = [ReverseComplement()(i) for i in inputs]
     output = model.outputs[0]
