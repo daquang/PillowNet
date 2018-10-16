@@ -15,7 +15,6 @@ import tensorflow as tf
 import keras
 from tqdm import trange
 
-
 from genomeloader.wrapper import TwoBitWrapper, FastaWrapper, BedWrapper, BigWigWrapper, BedGraphWrapper
 from genomeloader.generator import MultiBedGenerator
 
@@ -270,6 +269,7 @@ def main():
     for i in range(len(beds)):
         print('Fraction of valid zero labels for BED %i : %.4f' % (i, fraction_valid_zeros[i]))
 
+    # Set bias in final layer based on fraction of zero labels
     final_layer = model.layers[-1]
     final_layer_weights = final_layer.get_weights()
     final_layer_weights[1] = np.log((1 - fraction_valid_zeros) / fraction_valid_zeros)
@@ -303,16 +303,16 @@ def main():
 
     callbacks = [
         keras.callbacks.TensorBoard(log_dir=output_dir,
-                                    histogram_freq=0, write_graph=True, write_images=False)#,
-        #keras.callbacks.ModelCheckpoint(os.path.join(output_dir+'/', "weights.h5"),
-        #                                verbose=0, save_weights_only=False, monitor='val_loss')
+                                    histogram_freq=0, write_graph=True, write_images=False),
+        keras.callbacks.ModelCheckpoint(os.path.join(output_dir+'/', "best_weights.h5"),
+                                        verbose=1, save_best_only=True, monitor='val_loss', save_weights_only=True)
     ]
 
     model.fit_generator(generator=generator_train,
                         validation_data=generator_valid, epochs=epochs,
                         callbacks=callbacks, use_multiprocessing=use_multiprocessing, workers=workers)
 
-    model.save(output_dir + '/final_model.h5')
+    model.save(output_dir + '/final_weights.h5', include_optimizer=False)
 
 
 if __name__ == '__main__':

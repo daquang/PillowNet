@@ -1,7 +1,7 @@
 import numpy as np
 from .loss import dice_coef_loss, focal_loss, bce_dice_loss
 from keras.layers import Input, Conv1D, MaxPooling1D, Dense, concatenate, Flatten, Average, Maximum, Cropping1D,\
-    Bidirectional, LSTM, CuDNNLSTM
+    Bidirectional, LSTM, CuDNNLSTM, BatchNormalization
 from keras.models import Model
 from keras.optimizers import Adam
 import keras.backend as K
