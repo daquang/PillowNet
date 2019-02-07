@@ -35,18 +35,17 @@ def conv1d_leaky(filters=32, kernel_size=11, strides=1, padding='valid', dilatio
         PReLU())
 
 
-def conv1dtranspose(filters=32, kernel_size=11, strides=2, padding='same'):
+def conv1dtranspose(filters=32, kernel_size=11, activation='relu', strides=2, padding='same'):
     return compose(
         Lambda(lambda x: K.expand_dims(x, axis=2)),
-        Conv2DTranspose(filters=filters, kernel_size=(kernel_size, 1), strides=(strides, 1), padding=padding),
+        Conv2DTranspose(filters=filters, kernel_size=(kernel_size, 1), activation=activation, strides=(strides, 1),
+                        padding=padding),
         Lambda(lambda x: K.squeeze(x, axis=2)))
 
 
 def conv1d_block(filters=32, kernel_size=11, activation='relu', padding='same', depth=2):
     block = compose(*[Conv1D(filters=filters, kernel_size=kernel_size, activation=activation, padding=padding)
                       for _ in range(depth)])
-    #block = compose(*[conv1d_batchnorm_leaky(filters=filters, kernel_size=kernel_size, padding=padding)
-    #                  for _ in range(depth)])
     return block
 
 

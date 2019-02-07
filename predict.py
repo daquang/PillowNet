@@ -5,14 +5,8 @@ Use `predict.py -h` to see an auto-generated description of advanced options.
 """
 
 import argparse
-import sys
-import os
-import errno
-import shutil
 import numpy as np
-import random as rn
-import tensorflow as tf
-import keras
+
 from keras.models import load_model
 from tqdm import tqdm, trange
 import pybedtools as pbt
@@ -25,7 +19,7 @@ from pillownet.layer import ReverseComplement, Reverse
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Generating predictions.",
+    parser = argparse.ArgumentParser(description='Generating predictions.',
                                      epilog='\n'.join(__doc__.strip().split('\n')[1:]).strip(),
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-w', '--weights', required=True,
@@ -38,25 +32,25 @@ def get_args():
     parser.add_argument('-bw', '--bigwigs', type=str, required=False, nargs='*',
                         default=None,
                         help='Input bigwig files.')
-    parser.add_argument('-bg', '--bedgraphs', type=str, required=False, nargs='*',
-                        default=None,
-                        help='Input bedgraph files.')
     parser.add_argument('-s', '--step',
                         help='Step size and window size to make predictions for.',
                         type=int, default=50)
     parser.add_argument('-t', '--threshold',
-                        help='Convert all signal values below threshold to NAs (default: 1e-4).',
-                        type=float, default=1e-4)
+                        help='Remove all signal values below threshold (default: 1e-2).',
+                        type=float, default=1e-2)
     parser.add_argument('-p', '--processes',
                         help='Number of parallel process workers (default: 3. If set to 0, then multiprocessing will '
                              'not be used).',
                         type=int, default=3)
-    parser.add_argument('-c', '--chroms', type=str, nargs='+',
-                        default=['chr1', 'chr8', 'chr21'],
-                        help='Chromosome(s) to make predictions for.')
-    parser.add_argument('-wg', '--wholegenome', action='store_true', default=False,
-                        help='Make predictions for the whole genome.')
-    group = parser.add_mutually_exclusive_group(required=True)
+    group = parser.add_mutually_exclusive_group(required=False)
+    group.add_argument('-c', '--chroms', type=str, nargs='+',
+                       default=['chr1', 'chr8', 'chr21'],
+                       help='Chromosome(s) to make predictions for.')
+    group.add_argument('-wg', '--wholegenome', action='store_true', default=False,
+                       help='Make predictions for the whole genome.')
+    group.add_argument('-ax', '--autox', action='store_true', default=False,
+                       help='Predict on autosomes and X chromosome.')
+    group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('-gf', '--genomefasta', type=str,
                        help='Genome FASTA file.')
     group.add_argument('-gt', '--genometwobit', type=str,
@@ -83,30 +77,34 @@ def main():
         use_multiprocessing = False
         thread_safe = False
 
-    # Load genome
-    if args.genomefasta is None:
-        genome = TwoBitWrapper(args.genometwobit, thread_safe=thread_safe)
-    else:
-        genome = FastaWrapper(args.genomefasta, thread_safe=thread_safe)
+    signals = []
 
-    chroms_size = genome.chroms_size()
+    if args.genometwobit is not None:
+        genome = TwoBitWrapper(args.genometwobit, thread_safe=thread_safe)
+        signals.append(genome)
+    elif args.genomefasta is not None:
+        genome = FastaWrapper(args.genomefasta, thread_safe=thread_safe)
+        signals.append(genome)
+    else:
+        genome = None
+
+    # Load bigwigs
+    bigwig_files = args.bigwigs
+    bigwigs = [] if bigwig_files is None else [BigWigWrapper(bigwig_file, thread_safe=thread_safe) for bigwig_file in
+                                               bigwig_files]
+    signals.extend(bigwigs)
+
+    chroms_size = signals[0].chroms_size()
 
     # Load blacklist file
     blacklist_file = args.blacklist
     blacklist = None if blacklist_file is None else BedWrapper(blacklist_file)
 
-    # Load bigwigs and bedgraphs
-    bigwig_files = args.bigwigs
-    bigwigs = [] if bigwig_files is None else [BigWigWrapper(bigwig_file, thread_safe=thread_safe) for bigwig_file in
-                                               bigwig_files]
-    bedgraph_files = args.bedgraphs
-    bedgraphs = [] if bedgraph_files is None else [BedGraphWrapper(bedgraph_file) for bedgraph_file in bedgraph_files]
-    signals = []
-    signals.extend(bigwigs)
-    signals.extend(bedgraphs)
-
     if args.wholegenome:
-        chroms = genome.chroms()
+        chroms = signals[0].chroms()
+    elif args.autox:
+        chroms = ['chr1', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14', 'chr15', 'chr16', 'chr17', 'chr18', 'chr19',
+                  'chr2', 'chr20', 'chr21', 'chr22', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9', 'chrX']
     else:
         chroms = args.chroms
 
@@ -141,25 +139,32 @@ def main():
         chrom_size = chroms_size[chrom]
         chrom_windows_bt = pbt.BedTool().window_maker(genome={chrom: (0, chrom_size)}, w=step, s=step)
         chrom_windows = BedWrapper(chrom_windows_bt.fn, sort_bed=False)
-        generator = MultiBedGenerator(beds=[chrom_windows], genome=genome, signals=signals, seq_len=seq_len,
+        generator = MultiBedGenerator(beds=[chrom_windows], signals=signals, seq_len=seq_len,
                                       output_seq_len=output_seq_len, negatives_ratio=0, jitter_mode=None,
-                                      shuffle=False, return_sequences=return_sequences, return_output=False)
+                                      shuffle=False, return_sequences=return_sequences, return_output=False,
+                                      left_justify=True)
         chrom_start = 0
         for i in trange(len(generator)):
             batch = generator[i]
-            chrom_end = chrom_start + step * len(batch)
+            #chrom_end = chrom_start + step * len(batch)
             predictions_batch = model.predict(batch)
             values = predictions_batch.ravel()
+            chrom_end = chrom_start + len(values)
             starts = np.arange(chrom_start, chrom_end)
+            if blacklist is not None:
+                values_blacklist = blacklist[chrom, chrom_start:chrom_end].ravel()
+                values[values_blacklist] = 0
             if chrom_end > chrom_size:
                 crop_size = chrom_size - chrom_end
                 values = values[:crop_size]
                 starts = starts[:crop_size]
-            above_threshold = values > threshold
+            chrom_start = chrom_end
+            above_threshold = values >= threshold
             values = values[above_threshold]
+            if len(values) == 0:
+                continue
             starts = starts[above_threshold]
             bw.addEntries(chroms=chrom, starts=starts, span=1, values=values)
-            chrom_start = chrom_end
 
     bw.close()
 

@@ -1,5 +1,6 @@
 import numpy as np
-from .loss import dice_coef_loss, focal_loss, bce_dice_loss
+from .loss import dice_loss, focal_loss, bce_dice_loss, focal_dice_loss, tversky_loss, jaccard_coef_logloss,\
+    bce_jaccardlog_loss, bce_tversky_loss
 from keras.layers import Input, Conv1D, MaxPooling1D, Dense, concatenate, Flatten, Average, Maximum, Cropping1D,\
     Bidirectional, LSTM, CuDNNLSTM, BatchNormalization
 from keras.models import Model
@@ -44,7 +45,42 @@ def sliding(size=1018, input_channel=4, output_channel=1, filters=32, kernel_siz
     return model
 
 
-def unet(size=3084, input_channel=4, output_channel=1, filters=32, kernel_size=11, depth=5, crop=True, skip=False,
+def simple_window(size=2048, input_channel=1, output_channel=1, kernel_size=1001, loss='mse_regression'):
+    if not isinstance(size, int) or size < 1:
+        raise ValueError('size must be a positive integer')
+
+    if not isinstance(input_channel, int) or size < 1:
+        raise ValueError('input_channel must be a positive integer')
+
+    if not isinstance(output_channel, int) or output_channel < 1:
+        raise ValueError('output_channel must be a positive integer')
+
+    if not isinstance(kernel_size, int) or kernel_size < 1:
+        raise ValueError('kernel_size must be a positive integer')
+
+    if loss == 'mse_regression':
+        loss_func = 'mse'
+        output_activation = 'relu'
+    elif loss == 'msle_regression':
+        loss_func = 'msle'
+        output_activation = 'relu'
+    elif loss == 'poisson_regression':
+        loss_func = 'poisson'
+        output_activation = 'relu'
+    else:
+        raise ValueError('Loss must be one of the following: mse_regression, msle_regression, poisson_regression')
+    metrics = ['mse', 'msle', 'poisson']
+
+    inputs = Input((size, input_channel))
+    conv_layer = Conv1D(filters=output_channel, kernel_size=kernel_size, activation=output_activation)
+    outputs = conv_layer(inputs)
+    model = Model(inputs=inputs, outputs=[outputs])
+    model.compile(optimizer=Adam(lr=1e-5), loss=loss_func,
+                  metrics=metrics)
+    return model
+
+
+def unet(size=3084, input_channel=4, output_channel=1, filters=32, kernel_size=11, depth=5, crop=True, skip=True,
          recurrent=False, loss='bce_dice'):
     if not isinstance(size, int) or size < 1:
         raise ValueError('size must be a positive integer')
@@ -63,6 +99,49 @@ def unet(size=3084, input_channel=4, output_channel=1, filters=32, kernel_size=1
 
     padding = 'valid' if crop else 'same'
 
+    output_activation = 'sigmoid'
+    if loss == 'bce':
+        loss_func = 'binary_crossentropy'
+        metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
+    elif loss == 'dice':
+        loss_func = dice_loss
+        metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
+    elif loss == 'focal':
+        loss_func = focal_loss()
+        metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
+    elif loss == 'bce_dice':
+        loss_func = bce_dice_loss()
+        metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
+    elif loss == 'focal_dice':
+        loss_func = focal_dice_loss()
+        metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
+    elif loss == 'tversky':
+        loss_func = tversky_loss
+        metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
+    elif loss == 'jaccardlog':
+        loss_func = jaccard_coef_logloss
+        metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
+    elif loss == 'bce_jaccardlog':
+        loss_func = bce_jaccardlog_loss()
+        metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
+    elif loss == 'bce_tversky':
+        loss_func = bce_tversky_loss()
+        metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
+    elif loss == 'mse_regression':
+        loss_func = 'mse'
+        output_activation = 'relu'
+        metrics = ['mse', 'msle', 'poisson']
+    elif loss == 'msle_regression':
+        loss_func = 'msle'
+        output_activation = 'relu'
+        metrics = ['mse', 'msle', 'poisson']
+    elif loss == 'poisson_regression':
+        loss_func = 'poisson'
+        output_activation = 'relu'
+        metrics = ['mse', 'msle', 'poisson']
+    else:
+        raise ValueError('Invalid loss choice')
+
     if isinstance(input_channel, int):
         if input_channel < 1:
             raise ValueError('input_channel must be positive integer or iterable of positive integers')
@@ -76,6 +155,7 @@ def unet(size=3084, input_channel=4, output_channel=1, filters=32, kernel_size=1
         except TypeError:
             raise ValueError('input_channel must be positive integer or iterable of positive integers')
 
+    x = BatchNormalization()(x)
     # left
     left_activations = []
     left_sizes = []
@@ -139,40 +219,28 @@ def unet(size=3084, input_channel=4, output_channel=1, filters=32, kernel_size=1
     # final
 
     final_size = x_size
-    conv_final = Conv1D(output_channel, 1, activation='sigmoid')(right_activations[-1])
+    conv_final = Conv1D(output_channel, 1, activation=output_activation)(right_activations[-1])
 
     model = Model(inputs=inputs, outputs=[conv_final])
 
-    if loss == 'bce':
-        loss_func = 'binary_crossentropy'
-    elif loss == 'dice':
-        loss_func = dice_coef_loss
-    elif loss == 'focal':
-        loss_func = focal_loss()
-    elif loss == 'bce_dice':
-        loss_func = bce_dice_loss()
-    else:
-        raise ValueError('Loss must be one of the following: bce, dice, bce_dice')
-    model.compile(optimizer=Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, decay=0.0), loss=loss_func,
-                  metrics=['binary_accuracy', 'binary_crossentropy', dice_coef_loss])
+    model.compile(optimizer=Adam(lr=1e-5), loss=loss_func,
+                  metrics=metrics)
 
     if final_size != model.output_shape[1]:
         print(final_size, model.output.shape[1].value)
         raise ValueError('Something went wrong in the size calculation')
+
+    if not crop and final_size != size:
+        raise ValueError('You specified a non-crop U-Net, but the input and output sizes do not match.')
     return model
 
 
 def double_stranded(model, use_maximum=False):
     inputs = model.inputs
-    inputs_rc = []
-    for i in range(len(inputs)):
-        if i == 0: # Only the first input is DNA, which must be reverse complemented, not reversed
-            inputs_rc.append(ReverseComplement()(inputs[i]))
-        else:
-            inputs_rc.append(Reverse()(inputs[i]))
+    inputs_rc = [ReverseComplement()(i) for i in inputs]
     output = model.outputs[0]
     output_rc = model(inputs_rc)
-    if len(model.output_shape) == 3: # If the model is a u-net, the output must be reversed
+    if len(model.output_shape) == 3:  # If the model is a u-net, the output must be reversed
         output_rc = Reverse()(output_rc)
     merge_layer = Maximum() if use_maximum else Average()
     outputs_merge = merge_layer([output, output_rc])
