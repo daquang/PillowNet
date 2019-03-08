@@ -15,10 +15,12 @@ import tensorflow as tf
 import keras
 from tqdm import trange
 
-from genomeloader.wrapper import TwoBitWrapper, FastaWrapper, BedWrapper, BigWigWrapper, BedGraphWrapper
+from genomeloader.wrapper import TwoBitWrapper, FastaWrapper, BedWrapper, BigWigWrapper
 from genomeloader.generator import MultiBedGenerator
 
 from pillownet.model import unet, sliding, double_stranded, simple_window
+from pillownet.layer import Motifs
+from pillownet.motif import load_meme
 
 
 def get_args():
@@ -49,8 +51,8 @@ def get_args():
     parser.add_argument('-bwcl', '--bigwigscrosslabel', type=str, required=False, nargs='*',
                         default=None,
                         help='Label bigwig files for cross cell type validation.')
-    parser.add_argument('-m', '--model', default='detection', choices=['sliding', 'detection', 'simple'],
-                        help='Model type (default: detection)', type=str)
+    parser.add_argument('-m', '--model', default='unet', choices=['sliding', 'unet', 'simple'],
+                        help='Model type (default: unet)', type=str)
     parser.add_argument('-l', '--loss', default='bce_dice', choices=['bce', 'dice', 'focal', 'bce_dice', 'focal_dice',
                                                                      'tversky', 'jaccardlog', 'bce_jaccardlog',
                                                                      'bce_tversky',
@@ -74,21 +76,21 @@ def get_args():
                         help='Chromosome(s) to set aside for testing (default: chr1, chr8, chr21).')
     parser.add_argument('-L', '--seqlen', type=int, required=False,
                         default=None,
-                        help='Length of sequence input (default: 1018 for sliding, 3084 for cropped detection, 1024 for'
-                             ' non-cropped detection).')
+                        help='Length of sequence input (default: 1018 for sliding, 6700 for cropped u-net, 1024 for'
+                             ' non-cropped u-net).')
     parser.add_argument('-f', '--filters', type=int, required=False,
                         default=32,
                         help='Number of filters in the first block (default: 32).')
     parser.add_argument('-k', '--kernelsize', type=int, required=False,
                         default=None,
-                        help='Kernel size (default: 20 for sliding, 11 for detection.')
+                        help='Kernel size (default: 20 for sliding, 11 for u-net.')
     parser.add_argument('-d', '--depth', type=int, required=False,
                         default=None,
-                        help='Number of blocks (default: 1 for sliding, 5 for detection.')
+                        help='Number of blocks (default: 1 for sliding, 5 for u-net.')
     parser.add_argument('-sp', '--samepadding', action='store_true', default=False,
-                        help='Use same padding (no cropping) in the detection model (default: valid padding).')
+                        help='Use same padding (no cropping) in the u-net model (default: valid padding).')
     parser.add_argument('-ns', '--noskip', action='store_true', default=False,
-                        help='Do not use skip connections in the detection model (default: use skip connections).')
+                        help='Do not use skip connections in the u-net model (default: use skip connections).')
     parser.add_argument('-re', '--recurrent', action='store_true', default=False,
                         help='Add a recurrent layer (default: no recurrent layer).')
     parser.add_argument('-bs', '--batchsize',
@@ -100,6 +102,9 @@ def get_args():
     parser.add_argument('-er', '--epochsreset',
                         help='Number of epochs to reset negative sampling (default: 10).',
                         type=int, default=5)
+    parser.add_argument('-me', '--meme', required=False,
+                        default=None,
+                        help='MEME file of motifs to initialize with.', type=str)
     parser.add_argument('-s', '--seed',
                         help='Random seed for reproducibility (default: 1337).',
                         type=int, default=1337)
@@ -207,6 +212,17 @@ def main():
     output_signals = [] if bigwiglabel_files is None else [BigWigWrapper(bigwiglabel_file, thread_safe=thread_safe)
                                                            for bigwiglabel_file in bigwiglabel_files]
 
+    # Load the MEME file and make a Motifs layer
+    if args.meme:
+        ppms, _, _, _, _ = load_meme(args.meme)
+        if revcomp:
+            ppms_rc = [ppm[::-1, ::-1] for ppm in ppms]
+            ppms = ppms + ppms_rc
+        motifs_layer = Motifs(ppms)
+    else:
+        motifs_layer = None
+
+
     # Make model
     if len(signals) == 1:
         if genome is not None:
@@ -218,15 +234,16 @@ def main():
         if genome is not None:
             input_channel[0] = 4
     output_channel = len(beds)
-    if model_type == 'detection':
+    if model_type == 'unet':
         if seq_len is None:
-            seq_len = 3084 if crop else 1024
+            seq_len = 6700 if crop else 1024
         if kernel_size is None:
             kernel_size = 11
         if depth is None:
             depth = 5
         model = unet(size=seq_len, input_channel=input_channel, output_channel=output_channel, skip=skip, crop=crop,
-                     recurrent=recurrent, filters=filters, kernel_size=kernel_size, depth=depth, loss=loss)
+                     recurrent=recurrent, filters=filters, kernel_size=kernel_size, depth=depth, loss=loss,
+                     motifs_layer=motifs_layer)
         output_size = model.output_shape[1]
     elif model_type == 'sliding':
         if seq_len is None:
@@ -240,12 +257,11 @@ def main():
         output_size = None
     else:
         if seq_len is None:
-            seq_len = 2048
+            seq_len = 6700
         if kernel_size is None:
-            kernel_size = 1001
+            kernel_size = 2001
         model = simple_window(size=seq_len, kernel_size=kernel_size, loss=loss)
         output_size = model.output_shape[1]
-
 
     # Make data generator
     return_sequences = args.model != 'sliding'

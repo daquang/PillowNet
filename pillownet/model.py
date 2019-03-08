@@ -45,7 +45,7 @@ def sliding(size=1018, input_channel=4, output_channel=1, filters=32, kernel_siz
     return model
 
 
-def simple_window(size=2048, input_channel=1, output_channel=1, kernel_size=1001, loss='mse_regression'):
+def simple_window(size=6700, input_channel=1, output_channel=1, kernel_size=2001, loss='mse_regression'):
     if not isinstance(size, int) or size < 1:
         raise ValueError('size must be a positive integer')
 
@@ -80,8 +80,8 @@ def simple_window(size=2048, input_channel=1, output_channel=1, kernel_size=1001
     return model
 
 
-def unet(size=3084, input_channel=4, output_channel=1, filters=32, kernel_size=11, depth=5, crop=True, skip=True,
-         recurrent=False, loss='bce_dice'):
+def unet(size=6700, input_channel=4, output_channel=1, filters=32, kernel_size=11, depth=5, crop=True, skip=True,
+         recurrent=False, motifs_layer=None, use_batchnorm=True, loss='bce_dice'):
     if not isinstance(size, int) or size < 1:
         raise ValueError('size must be a positive integer')
 
@@ -155,7 +155,15 @@ def unet(size=3084, input_channel=4, output_channel=1, filters=32, kernel_size=1
         except TypeError:
             raise ValueError('input_channel must be positive integer or iterable of positive integers')
 
-    x = BatchNormalization()(x)
+    if motifs_layer:
+        if not (input_channel == 4 or input_channel[0] == 4):
+            raise ValueError('You can only use a motifs layer if DNA signal is included')
+        motifs_acts = motifs_layer(inputs[0])
+        x = concatenate([x, motifs_acts], axis=2)
+
+    # Apply batch normalization
+    if use_batchnorm:
+        x = BatchNormalization()(x)
     # left
     left_activations = []
     left_sizes = []

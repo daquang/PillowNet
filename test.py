@@ -8,7 +8,6 @@ import argparse
 from sklearn.metrics import roc_curve, precision_recall_curve, auc, mean_squared_error
 from scipy.stats import pearsonr, spearmanr
 import numpy as np
-import pylab
 from tqdm import tqdm, trange
 
 from genomeloader.wrapper import BedWrapper, BigWigWrapper
@@ -28,7 +27,7 @@ def get_args():
     parser.add_argument('-t', '--testbed', required=False,
                         help='BED of intervals to perform evaluation on.', type=str)
     parser.add_argument('-bl', '--blacklist', required=False,
-                        default='resources/blacklist.bed.gz',
+                        default=None,
                         help='Blacklist BED file.', type=str)
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('-c', '--chroms', type=str, nargs='+',

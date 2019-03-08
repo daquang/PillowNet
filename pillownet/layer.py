@@ -1,10 +1,10 @@
 from functools import reduce
+import numpy as np
 from keras import backend as K
 from keras.engine.topology import Layer
 from keras.layers import Conv1D, Conv2DTranspose, Lambda, Add, UpSampling1D, Concatenate, MaxPooling1D
 from keras.layers.advanced_activations import LeakyReLU, PReLU
 from keras.layers.normalization import BatchNormalization
-from .motif import load_meme
 
 
 def compose(*funcs):
@@ -52,6 +52,22 @@ def convmaxpool1d_block(filters=32, kernel_size=11, activation='relu', padding='
     block = compose(*[Conv1D(filters=filters, kernel_size=kernel_size, activation=activation, padding=padding)
                       for _ in range(depth)], MaxPooling1D(pool_size=pool_size))
     return block
+
+
+class Motifs(Conv1D):
+    def __init__(self, ppms, smooth=1e-6):
+        ppms_lens = [len(ppm) for ppm in ppms]
+        max_ppms_lens = max(ppms_lens)
+        pwm_weights = np.zeros((max_ppms_lens, 4, len(ppms)))
+        for i in range(len(ppms)):
+            ppm = ppms[i]
+            pwm = ppm.copy()
+            pwm[pwm < smooth] = smooth
+            pwm = pwm / 0.25
+            pwm = np.log2(pwm)
+            pwm_weights[:len(pwm), :, i] = pwm[::-1]
+        super().__init__(filters=len(ppms), strides=1, kernel_size=max_ppms_lens, padding='same',
+                         weights=[pwm_weights], use_bias=False, trainable=False)
 
 
 class ReverseComplement(Layer):
