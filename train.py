@@ -101,7 +101,7 @@ def get_args():
                         type=int, default=5)
     parser.add_argument('-er', '--epochsreset',
                         help='Number of epochs to reset negative sampling (default: 10).',
-                        type=int, default=5)
+                        type=int, default=10)
     parser.add_argument('-me', '--meme', required=False,
                         default=None,
                         help='MEME file of motifs to initialize with.', type=str)
