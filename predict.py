@@ -15,7 +15,7 @@ import pyBigWig as pbw
 from genomeloader.wrapper import TwoBitWrapper, FastaWrapper, BedWrapper, BigWigWrapper, BedGraphWrapper
 from genomeloader.generator import MultiBedGenerator
 
-from pillownet.layer import ReverseComplement, Reverse
+from pillownet.layer import ReverseComplement, Reverse, Motifs
 
 
 def get_args():
@@ -38,6 +38,8 @@ def get_args():
     parser.add_argument('-t', '--threshold',
                         help='Remove all signal values below threshold (default: 1e-2).',
                         type=float, default=1e-2)
+    parser.add_argument('-at', '--autothreshold', action='store_true', default=False,
+                        help='Automatically set threshold.')
     parser.add_argument('-p', '--processes',
                         help='Number of parallel process workers (default: 3. If set to 0, then multiprocessing will '
                              'not be used).',
@@ -66,6 +68,7 @@ def main():
     step = args.step
     workers = args.processes
     threshold = args.threshold
+    autothreshold = args.autothreshold
 
     bw = pbw.open(output_file, 'w')
 
@@ -115,7 +118,16 @@ def main():
     bw.addHeader(header)
 
     model = load_model(weights_file, custom_objects={'ReverseComplement': ReverseComplement,
-                                                     'Reverse': Reverse}, compile=False)
+                                                     'Reverse': Reverse,
+                                                     'Motifs': Motifs}, compile=False)
+
+    if autothreshold:
+        input_shape = np.array(model.input_shape)
+        input_shape[0] = 1
+        input_zeros = np.zeros(input_shape)
+        output_zeros = model(input_zeros)
+        threshold = output_zeros.max() * 1.01
+        print('The new threshold is: %f' % threshold)
 
     return_sequences = len(model.output_shape) == 3
     multi_task = model.output_shape[-1] > 1
