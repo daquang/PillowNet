@@ -260,7 +260,7 @@ def main():
         if seq_len is None:
             seq_len = 6700
         if kernel_size is None:
-            kernel_size = 2001
+            kernel_size = 1881
         model = simple_window(size=seq_len, kernel_size=kernel_size, loss=loss)
         output_size = model.output_shape[1]
 
