@@ -45,7 +45,7 @@ def sliding(size=1018, input_channel=4, output_channel=1, filters=32, kernel_siz
     return model
 
 
-def simple_window(size=6700, input_channel=1, output_channel=1, kernel_size=2001, loss='mse_regression'):
+def simple_window(size=6700, input_channel=1, output_channel=1, kernel_size=1881, loss='mse_regression'):
     if not isinstance(size, int) or size < 1:
         raise ValueError('size must be a positive integer')
 
@@ -102,15 +102,19 @@ def unet(size=6700, input_channel=4, output_channel=1, filters=32, kernel_size=1
     output_activation = 'sigmoid'
     if loss == 'bce':
         loss_func = 'binary_crossentropy'
+        output_activation = 'sigmoid'
         metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
     elif loss == 'dice':
         loss_func = dice_loss
+        output_activation = 'sigmoid'
         metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
     elif loss == 'focal':
         loss_func = focal_loss()
+        output_activation = 'sigmoid'
         metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
     elif loss == 'bce_dice':
         loss_func = bce_dice_loss()
+        output_activation = 'sigmoid'
         metrics = ['binary_accuracy', 'binary_crossentropy', dice_loss]
     elif loss == 'focal_dice':
         loss_func = focal_dice_loss()

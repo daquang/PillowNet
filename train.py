@@ -11,6 +11,7 @@ import errno
 import shutil
 import numpy as np
 import random as rn
+import pickle as pkl
 import tensorflow as tf
 import keras
 from tqdm import trange
@@ -397,13 +398,16 @@ def main():
     callbacks = [
         keras.callbacks.TensorBoard(log_dir=output_dir,
                                     histogram_freq=0, write_graph=True, write_images=False),
-        keras.callbacks.ModelCheckpoint(os.path.join(output_dir+'/', "best_weights.h5"),
+        keras.callbacks.ModelCheckpoint(os.path.join(output_dir+'/', 'best_weights.h5'),
                                         verbose=1, save_best_only=True, monitor='val_loss', save_weights_only=False)
     ]
 
-    model.fit_generator(generator=generator_train,
-                        validation_data=generator_valid, epochs=epochs,
-                        callbacks=callbacks, use_multiprocessing=use_multiprocessing, workers=workers)
+    history = model.fit_generator(generator=generator_train,
+                                  validation_data=generator_valid, epochs=epochs,
+                                  callbacks=callbacks, use_multiprocessing=use_multiprocessing, workers=workers)
+
+    with open(output_dir + '/history.pkl', 'wb') as f:
+        pkl.dump(history, f)
 
     model.save(output_dir + '/final_weights.h5', include_optimizer=False)
 

@@ -20,12 +20,12 @@ def get_args():
                         help='BigWig of predictions.', type=str)
     parser.add_argument('-o', '--output', required=True,
                         help='Output BED of intervals.', type=str)
-    parser.add_argument('-l', '--minlength', required=False, default=200,
-                        help='Minimum size of peaks (200 bps_.', type=int)
+    parser.add_argument('-l', '--minlength', required=False, default=147,
+                        help='Minimum size of peaks (147 bps).', type=int)
     parser.add_argument('-t', '--threshold', required=False, default=0.5,
                         help='Minimum probability to call peaks (default: 0.5).', type=float)
     parser.add_argument('-bl', '--blacklist', required=False,
-                        default='resources/blacklist.bed.gz',
+                        default=None,
                         help='Blacklist BED file.', type=str)
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('-c', '--chroms', type=str, nargs='+',
