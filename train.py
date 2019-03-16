@@ -407,7 +407,7 @@ def main():
                                   callbacks=callbacks, use_multiprocessing=use_multiprocessing, workers=workers)
 
     with open(output_dir + '/history.pkl', 'wb') as f:
-        pkl.dump(history, f)
+        pkl.dump(history.history, f)
 
     model.save(output_dir + '/final_weights.h5', include_optimizer=False)
 
