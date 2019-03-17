@@ -81,7 +81,7 @@ def simple_window(size=6700, input_channel=1, output_channel=1, kernel_size=1881
 
 
 def unet(size=6700, input_channel=4, output_channel=1, filters=32, kernel_size=11, depth=5, crop=True, skip=True,
-         recurrent=False, motifs_layer=None, use_batchnorm=True, loss='bce_dice'):
+         recurrent=False, motifs_layer=None, use_batchnorm=False, loss='bce_dice'):
     if not isinstance(size, int) or size < 1:
         raise ValueError('size must be a positive integer')
 
