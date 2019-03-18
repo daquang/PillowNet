@@ -80,8 +80,8 @@ def get_args():
                         help='Length of sequence input (default: 1018 for sliding, 6700 for cropped u-net, 1024 for'
                              ' non-cropped u-net).')
     parser.add_argument('-f', '--filters', type=int, required=False,
-                        default=32,
-                        help='Number of filters in the first block (default: 32).')
+                        default=16,
+                        help='Number of filters in the first block (default: 16).')
     parser.add_argument('-k', '--kernelsize', type=int, required=False,
                         default=None,
                         help='Kernel size (default: 20 for sliding, 11 for u-net.')
