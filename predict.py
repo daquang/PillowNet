@@ -125,7 +125,7 @@ def main():
         input_shape = np.array(model.input_shape)
         input_shape[0] = 1
         input_zeros = np.zeros(input_shape)
-        output_zeros = model(input_zeros)
+        output_zeros = model.predict(input_zeros)
         threshold = output_zeros.max() * 1.01
         print('The new threshold is: %f' % threshold)
 
