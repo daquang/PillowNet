@@ -122,9 +122,16 @@ def main():
                                                      'Motifs': Motifs}, compile=False)
 
     if autothreshold:
-        input_shape = np.array(model.input_shape)
-        input_shape[0] = 1
-        input_zeros = np.zeros(input_shape)
+        input_shape = model.input_shape
+        if type(input_shape) is list:
+            input_shape = [np.array(i) for i in input_shape]
+            for i in input_shape:
+                i[0] = 1
+            input_zeros = [np.zeros(i) for i in input_shape]
+        else:
+            input_shape = np.array(input_shape)
+            input_shape[0] = 1
+            input_zeros = np.zeros(input_shape)
         output_zeros = model.predict(input_zeros)
         threshold = output_zeros.max() * 1.01
         print('The new threshold is: %f' % threshold)
