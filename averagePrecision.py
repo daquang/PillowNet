@@ -74,7 +74,7 @@ def main():
     num_gt_peaks = len(b)
     true_positives_detected = 0
     false_positives_detected = 0
-    gt_genomic_interval_tree = b.genomic_interval_tree
+    #gt_genomic_interval_tree = b.genomic_interval_tree
     num_pr_peaks = len(a)
     predictions_df = a.df
     predictions_df.sort_values(by=data_col, ascending=False, inplace=True)
@@ -91,8 +91,9 @@ def main():
         end = getattr(row, 'chromEnd')
         value = getattr(row, data_col)
         thresholds.append(value)
-        chrom_gt_tree = gt_genomic_interval_tree[chrom]
-        potential_gt_intervals = chrom_gt_tree.search(start, end)
+        #chrom_gt_tree = gt_genomic_interval_tree[chrom]
+        #potential_gt_intervals = chrom_gt_tree.overlap(start, end)
+        potential_gt_intervals = b.search(chrom, start, end)
         overlaps_positive = False
         for potential_gt_interval in potential_gt_intervals:
             row_iou = iou(start, end, potential_gt_interval.begin, potential_gt_interval.end)
