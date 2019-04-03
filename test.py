@@ -29,6 +29,9 @@ def get_args():
     parser.add_argument('-bl', '--blacklist', required=False,
                         default=None,
                         help='Blacklist BED file.', type=str)
+    parser.add_argument('-ac', '--aggregatechromosomes', action='store_true', default=False,
+                        help='If no test BED provided, evaluate as an aggregate across all test chromosomes. Will '
+                             'consume more memory (default: evaluate at a per-chromosome level).')
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument('-c', '--chroms', type=str, nargs='+',
                         default=['chr1', 'chr8', 'chr21'],
@@ -46,6 +49,7 @@ def main():
     bigwig_file = args.predictions
     labels_bigwig_file = args.labels
     bed_file = args.bed
+    aggregate = args.aggregatechromosomes
 
     if args.labels is None and args.bed is None:
         raise ValueError('You must supply ground truth BED or bigWig file')
@@ -77,14 +81,14 @@ def main():
         if test_over_intervals:
             test_regression_over_intervals(bed_test, labels_bw, bw, blacklist)
         else:
-            test_regression(chroms, labels_bw, bw, blacklist)
+            test_regression(chroms, labels_bw, bw, blacklist, aggregate)
     else:
         # Load BED file of ground truth intervals
         bed = BedWrapper(bed_file)
         if test_over_intervals:
             test_classification_over_intervals(bed_test, bed, bw, blacklist)
         else:
-            test_classification(chroms, bed, bw, blacklist)
+            test_classification(chroms, bed, bw, blacklist, aggregate)
 
 
 def test_regression_over_intervals(bed_test, labels_bw, bw, blacklist):
@@ -114,12 +118,15 @@ def test_regression_over_intervals(bed_test, labels_bw, bw, blacklist):
     print('Spearman R:', spearman)
 
 
-def test_regression(chroms, labels_bw, bw, blacklist):
+def test_regression(chroms, labels_bw, bw, blacklist, aggregate):
     chroms_size = bw.chroms_size()
 
     mses = []
     pearsons = []
     spearmans = []
+
+    y_true = []
+    y_pred = []
 
     pbar = tqdm(chroms)
     for chrom in pbar:
@@ -137,87 +144,32 @@ def test_regression(chroms, labels_bw, bw, blacklist):
         mses.append(mse)
         pearsons.append(pearson)
         spearmans.append(spearman)
+        if aggregate:
+            y_true.append(chrom_labels)
+            y_pred.append(chrom_predictions)
+    if aggregate:
+        y_true = np.concatenate(y_true)
+        y_pred = np.concatenate(y_pred)
+        mse_mean = mean_squared_error(y_true, y_pred)
+        pearson_mean, pearson_p_mean = pearsonr(y_pred, y_true)
+        spearman_mean, spearman_p_mean = spearmanr(y_pred, y_true)
+    else:
+        mse_mean = np.mean(mses)
+        pearson_mean = np.mean(pearsons)
+        spearman_mean = np.mean(spearmans)
     print('Chromosomes:', chroms)
     print('MSEs:', mses)
-    print('MSE (chromosome average):', np.mean(mses))
+    print('MSE (chromosome average):', mse_mean)
     print('Pearson Rs:', pearsons)
-    print('Pearson R (chromosome average):', np.mean(pearsons))
+    print('Pearson R (chromosome average):', pearson_mean)
     print('Spearman Rs:', spearmans)
-    print('Spearman R (chromosome average):', np.mean(spearmans))
+    print('Spearman R (chromosome average):', spearman_mean)
 
 
 def dice_coef(y_true, y_pred):
     intersect = np.sum(y_true * y_pred)
     denom = np.sum(y_true + y_pred)
     return np.mean(2. * intersect / denom)
-
-
-def test_classification(chroms, bed, bw, blacklist):
-    chroms_size = bw.chroms_size()
-
-    fracs = []
-    aurocs = []
-    fprs = []
-    tprs = []
-    precisions = []
-    recalls = []
-    auprs = []
-    dices = []
-
-    pbar = tqdm(chroms)
-    for chrom in pbar:
-        pbar.set_description('Processing %s' % chrom)
-        chrom_size = chroms_size[chrom]
-        chrom_predictions = bw[chrom]
-        chrom_labels = bed[chrom, 0:chrom_size]
-        if blacklist is not None:
-            chrom_blacklist = ~ blacklist[chrom, 0:chrom_size]
-            chrom_predictions = chrom_predictions[chrom_blacklist]
-            chrom_labels = chrom_labels[chrom_blacklist]
-        frac = 1.0 * chrom_labels.sum() / len(chrom_labels)
-        fracs.append(frac)
-        fpr, tpr, _ = roc_curve(chrom_labels, chrom_predictions)
-        auroc = auc(fpr, tpr)
-        aurocs.append(auroc)
-        fprs.append(fpr)
-        tprs.append(tpr)
-        precision, recall, _ = precision_recall_curve(chrom_labels, chrom_predictions)
-        precisions.append(precision)
-        recalls.append(recall)
-        aupr = auc(recall, precision)
-        auprs.append(aupr)
-        dice = dice_coef(chrom_labels, chrom_predictions)
-        dices.append(dice)
-
-    bw.close()
-    jaccards = [s/(2-s) for s in dices]
-    print('Chromosomes:', chroms)
-    print('Positive fractions:', fracs)
-    print('Dice coefficients:', dices)
-    print('Dice coefficient (chromosome average):', np.mean(dices))
-    print('Jaccard indexes:', jaccards)
-    print('Jaccard index (chromosome average):', np.mean(jaccards))
-    print('auROCs:', aurocs)
-    print('auROC (chromosome average):', np.mean(aurocs))
-    print('auPRs:', auprs)
-    print('auPR (chromosome average):', np.mean(auprs))
-    """
-    pylab.subplot(121)
-    for i, chrom in enumerate(chroms):
-        pylab.plot(fprs[i], tprs[i], label=chrom + ' (auROC=%0.2f)' % aurocs[i])
-    pylab.plot([0, 1], [0, 1], 'k--', label='Random')
-    pylab.legend(loc='lower right')
-    pylab.xlabel('FPR')
-    pylab.ylabel('TPR')
-
-    pylab.subplot(122)
-    for i, chrom in enumerate(chroms):
-        pylab.plot(recalls[i], precisions[i], label=chrom + ' (auPR=%0.2f)' % auprs[i])
-    pylab.legend(loc='upper right')
-    pylab.xlabel('Recall')
-    pylab.ylabel('Precision')
-    pylab.show()
-    """
 
 
 def test_classification_over_intervals(bed_test, bed, bw, blacklist):
@@ -248,7 +200,7 @@ def test_classification_over_intervals(bed_test, bed, bw, blacklist):
     dice = dice_coef(y_true, y_pred)
 
     bw.close()
-    jaccard = dice (2 - dice)
+    jaccard = dice(2 - dice)
     print('Positive fraction:', frac)
     print('Dice coefficient:', dice)
     print('Jaccard index:', jaccard)
@@ -264,6 +216,94 @@ def test_classification_over_intervals(bed_test, bed, bw, blacklist):
 
     pylab.subplot(122)
     pylab.plot(recall, precision, label=chrom + ' (auPR=%0.2f)' % aupr)
+    pylab.legend(loc='upper right')
+    pylab.xlabel('Recall')
+    pylab.ylabel('Precision')
+    pylab.show()
+    """
+
+
+def test_classification(chroms, bed, bw, blacklist, aggregate):
+    chroms_size = bw.chroms_size()
+
+    fracs = []
+    aurocs = []
+    fprs = []
+    tprs = []
+    precisions = []
+    recalls = []
+    auprs = []
+    dices = []
+
+    y_true = []
+    y_pred = []
+
+    pbar = tqdm(chroms)
+    for chrom in pbar:
+        pbar.set_description('Processing %s' % chrom)
+        chrom_size = chroms_size[chrom]
+        chrom_predictions = bw[chrom]
+        chrom_labels = bed[chrom, 0:chrom_size]
+        if blacklist is not None:
+            chrom_blacklist = ~ blacklist[chrom, 0:chrom_size]
+            chrom_predictions = chrom_predictions[chrom_blacklist]
+            chrom_labels = chrom_labels[chrom_blacklist]
+        frac = 1.0 * chrom_labels.sum() / len(chrom_labels)
+        fracs.append(frac)
+        fpr, tpr, _ = roc_curve(chrom_labels, chrom_predictions)
+        auroc = auc(fpr, tpr)
+        aurocs.append(auroc)
+        fprs.append(fpr)
+        tprs.append(tpr)
+        precision, recall, _ = precision_recall_curve(chrom_labels, chrom_predictions)
+        precisions.append(precision)
+        recalls.append(recall)
+        aupr = auc(recall, precision)
+        auprs.append(aupr)
+        dice = dice_coef(chrom_labels, chrom_predictions)
+        dices.append(dice)
+        if aggregate:
+            y_true.append(chrom_labels)
+            y_pred.append(chrom_predictions)
+    if aggregate:
+        y_true = np.concatenate(y_true)
+        y_pred = np.concatenate(y_pred)
+        dice_mean = dice_coef(y_true, y_pred)
+        jaccard_mean = dice_mean / (2 - dice_mean)
+        fpr_mean, tpr_mean, _ = roc_curve(y_true, y_pred)
+        precision_mean, recall_mean, _ = precision_recall_curve(y_true, y_pred)
+        auroc_mean = auc(fpr_mean, tpr_mean)
+        aupr_mean = auc(recall_mean, precision_mean)
+    else:
+        dice_mean = np.mean(dices)
+        jaccards = [s / (2 - s) for s in dices]
+        jaccard_mean = np.mean(jaccards)
+        auroc_mean = np.mean(aurocs)
+        aupr_mean = np.mean(auprs)
+
+    bw.close()
+    print('Chromosomes:', chroms)
+    print('Positive fractions:', fracs)
+    print('Dice coefficients:', dices)
+    print('Dice coefficient (chromosome average):', dice_mean)
+    print('Jaccard indexes:', jaccards)
+    print('Jaccard index (chromosome average):', jaccard_mean)
+    print('auROCs:', aurocs)
+    print('auROC (chromosome average):', auroc_mean)
+    print('auPRs:', auprs)
+    print('auPR (chromosome average):', aupr_mean)
+    """
+    pylab.subplot(121)
+    for i, chrom in enumerate(chroms):
+        pylab.plot(fprs[i], tprs[i], label=chrom + ' (auROC=%0.2f)' % aurocs[i])
+    pylab.plot([0, 1], [0, 1], 'k--', label='Random')
+    pylab.legend(loc='lower right')
+    pylab.xlabel('FPR')
+    pylab.ylabel('TPR')
+
+    pylab.subplot(122)
+    for i, chrom in enumerate(chroms):
+        pylab.plot(recalls[i], precisions[i], label=chrom + ' (auPR=%0.2f)' % auprs[i])
     pylab.legend(loc='upper right')
     pylab.xlabel('Recall')
     pylab.ylabel('Precision')

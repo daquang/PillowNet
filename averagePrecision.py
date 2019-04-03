@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Evaluating predictions.",
+    parser = argparse.ArgumentParser(description='Evaluating predictions with AP metric.',
                                      epilog='\n'.join(__doc__.strip().split('\n')[1:]).strip(),
                                      formatter_class=argparse.RawTextHelpFormatter)
     group = parser.add_mutually_exclusive_group(required=True)
@@ -31,10 +31,11 @@ def get_args():
                        help='NarrowPeak of predicted intervals.', type=str)
     parser.add_argument('-b', '--b', required=True,
                         help='BED of ground truth intervals.', type=str)
-    parser.add_argument('-i', '--signalcolumn', required=False,
-                        help='Column index in prediction BED(s) containing signal value.', type=int)
     parser.add_argument('-t', '--threshold', required=False, default=0.5,
                         help='IOU threshold (default: 0.5).', type=float)
+    parser.add_argument('-bl', '--blacklist', required=False,
+                        default=None,
+                        help='Blacklist BED file.', type=str)
     parser.add_argument('-o', '--output', required=False, default=None,
                         help='Output directory (optional).', type=str)
     group = parser.add_mutually_exclusive_group(required=False)
@@ -62,6 +63,15 @@ def main():
     data_col = a.col_names[a.data_col - 1]
     iou_threshold = args.threshold
 
+    # Load blacklist file
+    blacklist_file = args.blacklist
+    blacklist = None if blacklist_file is None else BedWrapper(blacklist_file)
+    if blacklist is not None: # clip away parts of BED files that overlap blacklist intervals
+        new_b_bt = b.bt.subtract(blacklist.bt)
+        b = BedWrapper(new_b_bt.fn)
+        new_a_bt = a.bt.subtract(blacklist.bt)
+        a = BedWrapper(new_a_bt.fn, col_names=a.col_names, channel_last=a.channel_last, data_col=a.data_col, dtype=a.dtype)
+
     if not args.wholegenome:
         if args.autox:
             chroms = ['chr1', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14', 'chr15', 'chr16', 'chr17', 'chr18', 'chr19',
@@ -74,7 +84,7 @@ def main():
     num_gt_peaks = len(b)
     true_positives_detected = 0
     false_positives_detected = 0
-    #gt_genomic_interval_tree = b.genomic_interval_tree
+    gt_genomic_interval_tree = b.genomic_interval_tree
     num_pr_peaks = len(a)
     predictions_df = a.df
     predictions_df.sort_values(by=data_col, ascending=False, inplace=True)
@@ -91,14 +101,13 @@ def main():
         end = getattr(row, 'chromEnd')
         value = getattr(row, data_col)
         thresholds.append(value)
-        #chrom_gt_tree = gt_genomic_interval_tree[chrom]
-        #potential_gt_intervals = chrom_gt_tree.overlap(start, end)
-        potential_gt_intervals = b.search(chrom, start, end)
+        chrom_gt_tree = gt_genomic_interval_tree[chrom]
+        potential_gt_intervals = chrom_gt_tree.overlap(start, end)
         overlaps_positive = False
         for potential_gt_interval in potential_gt_intervals:
             row_iou = iou(start, end, potential_gt_interval.begin, potential_gt_interval.end)
             if row_iou >= iou_threshold:
-                #chrom_gt_tree.remove(potential_gt_interval)
+                chrom_gt_tree.remove(potential_gt_interval)
                 true_positives_detected += 1
                 overlaps_positive = True
                 break
