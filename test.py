@@ -265,6 +265,7 @@ def test_classification(chroms, bed, bw, blacklist, aggregate):
         if aggregate:
             y_true.append(chrom_labels)
             y_pred.append(chrom_predictions)
+    jaccards = [s / (2 - s) for s in dices]
     if aggregate:
         y_true = np.concatenate(y_true)
         y_pred = np.concatenate(y_pred)
@@ -276,7 +277,6 @@ def test_classification(chroms, bed, bw, blacklist, aggregate):
         aupr_mean = auc(recall_mean, precision_mean)
     else:
         dice_mean = np.mean(dices)
-        jaccards = [s / (2 - s) for s in dices]
         jaccard_mean = np.mean(jaccards)
         auroc_mean = np.mean(aurocs)
         aupr_mean = np.mean(auprs)

@@ -12,10 +12,10 @@ from tqdm import tqdm, trange
 import pybedtools as pbt
 import pyBigWig as pbw
 
-from genomeloader.wrapper import TwoBitWrapper, FastaWrapper, BedWrapper, BigWigWrapper, BedGraphWrapper
+from genomeloader.wrapper import TwoBitWrapper, FastaWrapper, BedWrapper, BigWigWrapper
 from genomeloader.generator import MultiBedGenerator
 
-from pillownet.layer import ReverseComplement, Reverse, Motifs
+from pillownet.layer import ReverseComplement, Reverse
 
 
 def get_args():
@@ -118,8 +118,7 @@ def main():
     bw.addHeader(header)
 
     model = load_model(weights_file, custom_objects={'ReverseComplement': ReverseComplement,
-                                                     'Reverse': Reverse,
-                                                     'Motifs': Motifs}, compile=False)
+                                                     'Reverse': Reverse}, compile=False)
 
     if autothreshold:
         input_shape = model.input_shape

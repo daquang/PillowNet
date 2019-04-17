@@ -54,22 +54,6 @@ def convmaxpool1d_block(filters=32, kernel_size=11, activation='relu', padding='
     return block
 
 
-class Motifs(Conv1D):
-    def __init__(self, ppms, smooth=1e-6):
-        ppms_lens = [len(ppm) for ppm in ppms]
-        max_ppms_lens = max(ppms_lens)
-        pwm_weights = np.zeros((max_ppms_lens, 4, len(ppms)))
-        for i in range(len(ppms)):
-            ppm = ppms[i]
-            pwm = ppm.copy()
-            pwm[pwm < smooth] = smooth
-            pwm = pwm / 0.25
-            pwm = np.log2(pwm)
-            pwm_weights[:len(pwm), :, i] = pwm[::-1]
-        super().__init__(filters=len(ppms), strides=1, kernel_size=max_ppms_lens, padding='same',
-                         weights=[pwm_weights], use_bias=False, trainable=False)
-
-
 class ReverseComplement(Layer):
     def call(self, x):
         return x[:, ::-1, ::-1]

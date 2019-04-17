@@ -1,11 +1,13 @@
 import numpy as np
 from .loss import dice_loss, focal_loss, bce_dice_loss, focal_dice_loss, tversky_loss, jaccard_coef_logloss,\
     bce_jaccardlog_loss, bce_tversky_loss
+from .metrics import pearson
 from keras.layers import Input, Conv1D, MaxPooling1D, Dense, concatenate, Flatten, Average, Maximum, Cropping1D,\
     Bidirectional, LSTM, CuDNNLSTM, BatchNormalization
 from keras.models import Model
 from keras.optimizers import Adam
 import keras.backend as K
+import tensorflow as tf
 from .layer import conv1dtranspose, conv1d_block, ReverseComplement, Reverse
 
 
@@ -45,7 +47,7 @@ def sliding(size=1018, input_channel=4, output_channel=1, filters=32, kernel_siz
     return model
 
 
-def simple_window(size=6700, input_channel=1, output_channel=1, kernel_size=1881, loss='mse_regression'):
+def simple_window(size=6700, input_channel=1, output_channel=1, kernel_size=1881, lr=1e-5, loss='mse_regression'):
     if not isinstance(size, int) or size < 1:
         raise ValueError('size must be a positive integer')
 
@@ -75,13 +77,13 @@ def simple_window(size=6700, input_channel=1, output_channel=1, kernel_size=1881
     conv_layer = Conv1D(filters=output_channel, kernel_size=kernel_size, activation=output_activation)
     outputs = conv_layer(inputs)
     model = Model(inputs=inputs, outputs=[outputs])
-    model.compile(optimizer=Adam(lr=1e-5), loss=loss_func,
+    model.compile(optimizer=Adam(lr=lr), loss=loss_func,
                   metrics=metrics)
     return model
 
 
-def unet(size=6700, input_channel=4, output_channel=1, filters=32, kernel_size=11, depth=5, crop=True, skip=True,
-         recurrent=False, motifs_layer=None, use_batchnorm=False, loss='bce_dice'):
+def unet(size=6700, input_channel=4, output_channel=1, filters=16, kernel_size=11, depth=5, crop=True, skip=True,
+         recurrent=False, motifs_layer=None, use_batchnorm=False, lr=1e-4, decay=1e-4, loss='bce_dice'):
     if not isinstance(size, int) or size < 1:
         raise ValueError('size must be a positive integer')
 
@@ -134,15 +136,22 @@ def unet(size=6700, input_channel=4, output_channel=1, filters=32, kernel_size=1
     elif loss == 'mse_regression':
         loss_func = 'mse'
         output_activation = 'relu'
-        metrics = ['mse', 'msle', 'poisson']
+        metrics = ['mae', 'mse', 'msle', 'logcosh', 'poisson']
+    elif loss == 'mae_regression':
+        loss_func = 'mae'
+        output_activation = 'relu'
+        metrics = ['mae', 'mse', 'msle', 'logcosh', 'poisson']
     elif loss == 'msle_regression':
         loss_func = 'msle'
         output_activation = 'relu'
-        metrics = ['mse', 'msle', 'poisson']
+        metrics = ['mae', 'mse', 'msle', 'logcosh', 'poisson']
+    elif loss == 'logcosh_regression':
+        loss_func = 'logcosh'
+        metrics = ['mae', 'mse', 'msle', 'logcosh', 'poisson']
     elif loss == 'poisson_regression':
         loss_func = 'poisson'
         output_activation = 'relu'
-        metrics = ['mse', 'msle', 'poisson']
+        metrics = ['mae', 'mse', 'msle', 'logcosh', 'poisson']
     else:
         raise ValueError('Invalid loss choice')
 
@@ -235,7 +244,7 @@ def unet(size=6700, input_channel=4, output_channel=1, filters=32, kernel_size=1
 
     model = Model(inputs=inputs, outputs=[conv_final])
 
-    model.compile(optimizer=Adam(lr=1e-5), loss=loss_func,
+    model.compile(optimizer=Adam(lr=lr, decay=decay), loss=loss_func,
                   metrics=metrics)
 
     if final_size != model.output_shape[1]:

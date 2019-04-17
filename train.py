@@ -20,7 +20,6 @@ from genomeloader.wrapper import TwoBitWrapper, FastaWrapper, BedWrapper, BigWig
 from genomeloader.generator import MultiBedGenerator
 
 from pillownet.model import unet, sliding, double_stranded, simple_window
-from pillownet.layer import Motifs
 from pillownet.motif import load_meme
 
 
@@ -56,9 +55,9 @@ def get_args():
                         help='Model type (default: unet)', type=str)
     parser.add_argument('-l', '--loss', default='bce_dice', choices=['bce', 'dice', 'focal', 'bce_dice', 'focal_dice',
                                                                      'tversky', 'jaccardlog', 'bce_jaccardlog',
-                                                                     'bce_tversky',
-                                                                     'mse_regression', 'msle_regression',
-                                                                     'poisson_regression'],
+                                                                     'bce_tversky', 'mse_regression',
+                                                                     'msle_regression', 'logcosh_regression',
+                                                                     'poisson_regression', 'mae_regression'],
                         help='Loss function (default: bce_dice)', type=str)
     parser.add_argument('-r', '--revcomp', action='store_true', default=False,
                         help='Consider both the given strand and the reverse complement strand (default: consider given'
@@ -92,14 +91,22 @@ def get_args():
                         help='Use same padding (no cropping) in the u-net model (default: valid padding).')
     parser.add_argument('-ns', '--noskip', action='store_true', default=False,
                         help='Do not use skip connections in the u-net model (default: use skip connections).')
+    parser.add_argument('-bn', '--usebatchnorm', action='store_true', default=False,
+                        help='Use batch normalization (default: do not use batch normalization).')
     parser.add_argument('-re', '--recurrent', action='store_true', default=False,
                         help='Add a recurrent layer (default: no recurrent layer).')
     parser.add_argument('-bs', '--batchsize',
                         help='Batch size (default: 128).',
                         type=int, default=128)
+    parser.add_argument('-lr', '--learningrate', type=float, required=False,
+                        default=1e-4,
+                        help='Learning rate (default: 1e-4.')
+    parser.add_argument('-dc', '--decay', type=float, required=False,
+                        default=1e-4,
+                        help='Learning rate (default: 1e-4.')
     parser.add_argument('-e', '--epochs',
                         help='Max number of epochs to train (default: 5).',
-                        type=int, default=5)
+                        type=int, default=50)
     parser.add_argument('-er', '--epochsreset',
                         help='Number of epochs to reset negative sampling (default: 10).',
                         type=int, default=10)
@@ -133,12 +140,15 @@ def main():
     window_len = args.window
     crop = not args.samepadding
     skip = not args.noskip
+    use_batchnorm = args.usebatchnorm
     recurrent = args.recurrent
     negatives_ratio = args.negativesratio
     filters = args.filters
     kernel_size = args.kernelsize
     depth = args.depth
     batch_size = args.batchsize
+    lr = args.learningrate
+    decay = args.decay
     epochs = args.epochs
     epochs_reset = args.epochsreset
     workers = args.processes
@@ -219,7 +229,21 @@ def main():
         if revcomp:
             ppms_rc = [ppm[::-1, ::-1] for ppm in ppms]
             ppms = ppms + ppms_rc
-        motifs_layer = Motifs(ppms)
+        ppms_lens = [len(ppm) for ppm in ppms]
+        max_ppms_lens = max(ppms_lens)
+        pwm_weights = np.zeros((max_ppms_lens, 4, len(ppms)))
+        smooth = 1e-6
+        for i in range(len(ppms)):
+            ppm = ppms[i]
+            pwm = ppm.copy()
+            pwm[pwm < smooth] = smooth
+            pwm = pwm / 0.25
+            pwm = np.log2(pwm)
+            max_pwm_score = pwm.max(axis=1).sum()
+            pwm = pwm / max_pwm_score
+            pwm_weights[:len(pwm), :, i] = pwm[::-1]
+        motifs_layer = keras.layers.Conv1D(filters=len(ppms), strides=1, kernel_size=max_ppms_lens, padding='same',
+                                           activation='relu', weights=[pwm_weights], use_bias=False, trainable=False)
     else:
         motifs_layer = None
 
@@ -244,7 +268,7 @@ def main():
             depth = 5
         model = unet(size=seq_len, input_channel=input_channel, output_channel=output_channel, skip=skip, crop=crop,
                      recurrent=recurrent, filters=filters, kernel_size=kernel_size, depth=depth, loss=loss,
-                     motifs_layer=motifs_layer)
+                     motifs_layer=motifs_layer, use_batchnorm=use_batchnorm, lr=lr, decay=decay)
         output_size = model.output_shape[1]
     elif model_type == 'sliding':
         if seq_len is None:
@@ -399,7 +423,8 @@ def main():
         keras.callbacks.TensorBoard(log_dir=output_dir,
                                     histogram_freq=0, write_graph=True, write_images=False),
         keras.callbacks.ModelCheckpoint(os.path.join(output_dir+'/', 'best_weights.h5'),
-                                        verbose=1, save_best_only=True, monitor='val_loss', save_weights_only=False)
+                                        verbose=1, save_best_only=True, monitor='val_loss', save_weights_only=False),
+        keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
     ]
 
     history = model.fit_generator(generator=generator_train,
