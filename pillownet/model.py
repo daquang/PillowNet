@@ -1,7 +1,6 @@
 import numpy as np
 from .loss import dice_loss, focal_loss, bce_dice_loss, focal_dice_loss, tversky_loss, jaccard_coef_logloss,\
     bce_jaccardlog_loss, bce_tversky_loss
-from .metrics import pearson
 from keras.layers import Input, Conv1D, MaxPooling1D, Dense, concatenate, Flatten, Average, Maximum, Cropping1D,\
     Bidirectional, LSTM, CuDNNLSTM, BatchNormalization
 from keras.models import Model
