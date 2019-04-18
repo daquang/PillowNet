@@ -258,7 +258,10 @@ def main():
         input_channel = (len(signals)) * [1]
         if genome is not None:
             input_channel[0] = 4
-    output_channel = len(beds)
+    if bigwiglabel_files is None:
+        output_channel = len(beds)
+    else:
+        output_channel = len(bigwiglabel_files)
     if model_type == 'unet':
         if seq_len is None:
             seq_len = 6700 if crop else 1024

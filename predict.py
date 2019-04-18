@@ -35,6 +35,9 @@ def get_args():
     parser.add_argument('-s', '--step',
                         help='Step size and window size to make predictions for.',
                         type=int, default=50)
+    parser.add_argument('-ch', '--channel',
+                        help='If the model is multi-task, select which channel will be output (default: 0).',
+                        type=int, default=0)
     parser.add_argument('-t', '--threshold',
                         help='Remove all signal values below threshold (default: 1e-2).',
                         type=float, default=1e-2)
@@ -66,6 +69,7 @@ def main():
     weights_file = args.weights
     output_file = args.output
     step = args.step
+    channel = args.channel
     workers = args.processes
     threshold = args.threshold
     autothreshold = args.autothreshold
@@ -138,11 +142,6 @@ def main():
     return_sequences = len(model.output_shape) == 3
     multi_task = model.output_shape[-1] > 1
 
-    # multi_task still not supported
-    if multi_task:
-        print('Multi-task not supported yet')
-        return
-
     dna_input_shape = model.input_shape[0] if isinstance(model.input_shape, list) else model.input_shape
     seq_len = dna_input_shape[1]
     output_seq_len = None
@@ -166,6 +165,8 @@ def main():
             batch = generator[i]
             #chrom_end = chrom_start + step * len(batch)
             predictions_batch = model.predict(batch)
+            if multi_task:
+                predictions_batch = predictions_batch[:, :, channel]
             values = predictions_batch.ravel()
             chrom_end = chrom_start + len(values)
             starts = np.arange(chrom_start, chrom_end)
