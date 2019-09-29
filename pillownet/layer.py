@@ -1,5 +1,4 @@
 from functools import reduce
-import numpy as np
 from keras import backend as K
 from keras.engine.topology import Layer
 from keras.layers import Conv1D, Conv2DTranspose, Lambda, Add, UpSampling1D, Concatenate, MaxPooling1D

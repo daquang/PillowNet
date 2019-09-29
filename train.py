@@ -110,6 +110,9 @@ def get_args():
     parser.add_argument('-er', '--epochsreset',
                         help='Number of epochs to reset negative sampling (default: 10).',
                         type=int, default=10)
+    parser.add_argument('-pa', '--patience',
+                        help='End training if validation loss does not lower in this number of epochs (default: 10).',
+                        type=int, default=50)
     parser.add_argument('-me', '--meme', required=False,
                         default=None,
                         help='MEME file of motifs to initialize with.', type=str)
@@ -151,6 +154,7 @@ def main():
     decay = args.decay
     epochs = args.epochs
     epochs_reset = args.epochsreset
+    patience = args.patience
     workers = args.processes
     seed = args.seed
     revcomp = args.revcomp
@@ -427,7 +431,7 @@ def main():
                                     histogram_freq=0, write_graph=True, write_images=False),
         keras.callbacks.ModelCheckpoint(os.path.join(output_dir+'/', 'best_weights.h5'),
                                         verbose=1, save_best_only=True, monitor='val_loss', save_weights_only=False),
-        keras.callbacks.EarlyStopping(monitor='val_loss', patience=10)
+        keras.callbacks.EarlyStopping(monitor='val_loss', patience=patience)
     ]
 
     history = model.fit_generator(generator=generator_train,

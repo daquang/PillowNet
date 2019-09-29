@@ -8,7 +8,7 @@ setup(version='0.1.0',
       url='https://github.com/daquang/PillowNet',
       license='MIT',
       author='Daniel Quang',
-      author_email='daquang@umich.edu',
+      author_email='daniel.quang@gmail.com',
       packages=find_packages(),
       install_requires=['numpy', 'genomeloader', 'keras', 'tensorflow']
       )

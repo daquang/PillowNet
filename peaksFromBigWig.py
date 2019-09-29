@@ -35,6 +35,8 @@ def get_args():
                         help='Generate peaks the whole genome.')
     group.add_argument('-ax', '--autox', action='store_true', default=False,
                        help='Generate peaks on autosomes and X chromosome.')
+    group.add_argument('-a', '--auto', action='store_true', default=False,
+                       help='Generate peaks on autosomes.')
     args = parser.parse_args()
     return args
 
@@ -58,6 +60,9 @@ def main():
     elif args.autox:
         chroms = ['chr1', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14', 'chr15', 'chr16', 'chr17', 'chr18', 'chr19',
                   'chr2', 'chr20', 'chr21', 'chr22', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9', 'chrX']
+    elif args.auto:
+        chroms = ['chr1', 'chr10', 'chr11', 'chr12', 'chr13', 'chr14', 'chr15', 'chr16', 'chr17', 'chr18', 'chr19',
+                  'chr2', 'chr20', 'chr21', 'chr22', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9']
     else:
         chroms = args.chroms
 

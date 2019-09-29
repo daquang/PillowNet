@@ -6,7 +6,6 @@ from keras.layers import Input, Conv1D, MaxPooling1D, Dense, concatenate, Flatte
 from keras.models import Model
 from keras.optimizers import Adam
 import keras.backend as K
-import tensorflow as tf
 from .layer import conv1dtranspose, conv1d_block, ReverseComplement, Reverse
 
 
